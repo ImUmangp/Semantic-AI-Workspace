@@ -6,7 +6,9 @@ const __dirname = path.dirname(__filename);
 // Serve React build - after azure
 
 //const pdfParse = require("pdf-parse/lib/pdf-parse");
-import pdfParse from "pdf-parse";
+// ✅ NEW (bypasses test harness)
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
+
 
 const upload = multer({
   storage: multer.memoryStorage(),
