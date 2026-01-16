@@ -497,10 +497,21 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, "client", "dist", "index.html"));
 });
 // -------------------- Start server or run CLI test --------------------
+//if (process.argv[2] === "test-chat") {
+//  testChat().then(() => process.exit(0));
+//} else {
+ // app.listen(PORT, () => {
+   // console.log(`Server running on http://localhost:${PORT}`);
+  //});
+//}
+// -------------------- Start server or run CLI test --------------------
 if (process.argv[2] === "test-chat") {
   testChat().then(() => process.exit(0));
 } else {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  const port = process.env.PORT || 3000;
+
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`✅ Server running on port ${port}`);
   });
 }
+

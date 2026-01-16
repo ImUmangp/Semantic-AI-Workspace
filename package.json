@@ -4,13 +4,11 @@
   "private": true,
   "type": "module",
   "main": "server.js",
-
   "scripts": {
     "start": "node server.js",
     "build": "npm install --prefix client && npm run build --prefix client",
-    "dev": "node server.js"
+    "dev": "concurrently \"node server.js\" \"npm --prefix client run dev\""
   },
-
   "dependencies": {
     "@azure/msal-browser": "^4.26.2",
     "@azure/msal-react": "^3.0.22",
@@ -22,5 +20,8 @@
     "multer": "^2.0.2",
     "pdf-parse": "^1.1.1",
     "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
