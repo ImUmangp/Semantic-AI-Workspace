@@ -1,0 +1,6 @@
+Note 3: Personal Learning / Knowledge Capture
+
+Title: Machine Learning Concepts — Overfitting vs Underfitting
+Content:
+
+Overfitting occurs when a model learns noise in the training data, reducing its generalization to new data. Underfitting happens when the model is too simple to capture patterns in the data. Solutions: use regularization techniques, cross-validation, and ensure sufficient training data. Example: a deep neural network predicting stock prices may overfit if training data is limited.

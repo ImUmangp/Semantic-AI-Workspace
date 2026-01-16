@@ -1,0 +1,1 @@
+This is my first sample document for testing Azure OpenAI embeddings and Azure AI Search vector search. I will later add more content here.

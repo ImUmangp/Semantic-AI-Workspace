@@ -1,0 +1,6 @@
+Note 2: Technical Troubleshooting
+
+Title: VPN Connectivity Issue
+Content:
+
+Users reported intermittent VPN disconnections affecting remote work. Logs indicate failed authentication attempts between 2:00 PM and 3:30 PM. Recommended steps: update VPN client software, verify firewall rules, and restart VPN gateways. Document findings and escalate recurring issues to the network operations team.
