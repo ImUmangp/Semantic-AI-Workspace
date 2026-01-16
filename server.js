@@ -1,7 +1,12 @@
 // server.js
-require("dotenv").config();
-const multer = require("multer");
-const pdfParse = require("pdf-parse/lib/pdf-parse");
+// Serve React build - after azure
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Serve React build - after azure
+
+//const pdfParse = require("pdf-parse/lib/pdf-parse");
+import pdfParse from "pdf-parse";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -9,15 +14,19 @@ const upload = multer({
 });
 
 
-const path = require("path");
-const express = require("express");
-const bodyParser = require("body-parser");
-const axios = require("axios");
-const {
+import express from "express";
+import path from "path";
+import bodyParser from "body-parser";
+import axios from "axios";
+import multer from "multer";
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+//require("dotenv").config();
+import {
   SearchClient,
   AzureKeyCredential,
-} = require("@azure/search-documents");
-
+}  from "@azure/search-documents";
+dotenv.config();
 const {
   AZURE_OPENAI_ENDPOINT,
   AZURE_OPENAI_API_KEY,
@@ -363,23 +372,22 @@ app.post("/upload-knowledge", upload.array("files", 10), async (req, res) => {
       const ext = (path.extname(file.originalname) || "").toLowerCase();
       let text = "";
 
-      // ---------- Extract text ----------
       if (ext === ".txt") {
         text = file.buffer.toString("utf8");
       } else if (ext === ".pdf") {
-          try {
-             const data = await pdfParse(file.buffer);
-             text = data.text || "";
-             } catch (pdfErr) {
+        try {
+          const data = await pdfParse(file.buffer);
+          text = data.text || "";
+        } catch (pdfErr) {
           console.error("PDF parse failed:", pdfErr);
           results.push({
-          file: file.originalname,
-          status: "failed",
-          reason: "PDF parsing error",
-        });
-       continue;
-      }
-    } else {
+            file: file.originalname,
+            status: "failed",
+            reason: "PDF parsing error",
+          });
+          continue;
+        }
+      } else {
         results.push({
           file: file.originalname,
           status: "skipped",
@@ -388,7 +396,6 @@ app.post("/upload-knowledge", upload.array("files", 10), async (req, res) => {
         continue;
       }
 
-      // ---------- Clean extracted text ----------
       const trimmed = text.trim();
       if (!trimmed) {
         results.push({
@@ -399,25 +406,20 @@ app.post("/upload-knowledge", upload.array("files", 10), async (req, res) => {
         continue;
       }
 
-      // Limit length for embedding
       const limited = trimmed.slice(0, 8000);
 
-      // ---------- Generate SAFE Azure Search ID ----------
       const baseName = path.basename(file.originalname, ext);
-
-      // Replace disallowed characters with "-"  
       const safeBase = baseName.replace(/[^A-Za-z0-9_\-=]/g, "-");
-
       const id = `${Date.now()}-${safeBase}`;
 
-      // ---------- Index into Azure Search ----------
       await indexDocument({
         id,
         content: limited,
         source: file.originalname,
       });
-metrics.totalDocumentsIndexed += 1;
-metrics.totalUploads += 1;
+
+      metrics.totalDocumentsIndexed += 1;
+      metrics.totalUploads += 1;
 
       results.push({
         file: file.originalname,
@@ -426,7 +428,6 @@ metrics.totalUploads += 1;
     }
 
     return res.json({ success: true, results });
-
   } catch (err) {
     console.error("Error in /upload-knowledge:", err);
     return res.status(500).json({
@@ -435,6 +436,9 @@ metrics.totalUploads += 1;
     });
   }
 });
+
+
+
 
 
 app.get("/health", (req, res) => {
@@ -474,8 +478,22 @@ app.post("/admin/settings", (req, res) => {
   });
 });
 
-// -------------------- SPA root (React app) --------------------
-app.get("/", (req, res) => {
+// -------------------- SPA root (React app) -------------------- uncomment if not in azure
+//app.get("/", (req, res) => {
+ // res.sendFile(path.join(__dirname, "client", "dist", "index.html"));
+//});
+
+
+
+
+// Serve React build - after azure
+app.use(express.static(path.join(__dirname, "client", "dist")));
+
+//app.get("/*", (req, res) => {
+//  res.sendFile(path.join(__dirname, "client", "dist", "index.html"));
+//});
+// SPA fallback (Express 5 safe)
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, "client", "dist", "index.html"));
 });
 // -------------------- Start server or run CLI test --------------------
