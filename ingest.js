@@ -1,14 +1,24 @@
-// ingest.js
-require("dotenv").config();
-const fs = require("fs");
-const path = require("path");
-const axios = require("axios");
-const { v4: uuidv4 } = require("uuid");
-const {
+// ingest.js (ES Module compatible)
+
+import "dotenv/config";
+import fs from "fs";
+import path from "path";
+import axios from "axios";
+import { v4 as uuidv4 } from "uuid";
+import { fileURLToPath } from "url";
+
+import {
   SearchClient,
   AzureKeyCredential,
-} = require("@azure/search-documents");
+} from "@azure/search-documents";
 
+import { extractTextWithOCR } from "./services/ocrServices.js";
+
+// ------------------ Path helpers ------------------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ------------------ Env ------------------
 const {
   AZURE_OPENAI_ENDPOINT,
   AZURE_OPENAI_API_KEY,
@@ -19,62 +29,61 @@ const {
   AZURE_SEARCH_INDEX,
 } = process.env;
 
-// --------- Chunk text ----------
+// ------------------ Chunking ------------------
 function chunkText(text, maxChars = 800) {
   const chunks = [];
   let start = 0;
+
   while (start < text.length) {
-    const end = Math.min(start + maxChars, text.length);
-    chunks.push(text.slice(start, end));
-    start = end;
+    chunks.push(text.slice(start, start + maxChars));
+    start += maxChars;
   }
+
   return chunks;
 }
 
-// --------- Foundry Embedding Function (Updated) ----------
+// ------------------ OCR Decision ------------------
+function needsOCR(text, fileName) {
+  const ext = path.extname(fileName).toLowerCase();
+  if (ext === ".txt") return false;
+  return !text || text.trim().length < 50;
+}
+
+// ------------------ Embeddings ------------------
 async function getEmbedding(text) {
-   const url =
+  const url =
     `${AZURE_OPENAI_ENDPOINT}` +
     `openai/deployments/${AZURE_OPENAI_EMBEDDING_DEPLOYMENT}/embeddings` +
     `?api-version=${AZURE_OPENAI_API_VERSION}`;
 
-  console.log("---- Embedding request debug ----");
-  console.log("URL:", url);
-  console.log("Model Name:", AZURE_OPENAI_EMBEDDING_DEPLOYMENT);
-  console.log("Endpoint:", AZURE_OPENAI_ENDPOINT);
-  console.log("---------------------------------");
-
-  try {
-    const response = await axios.post(
-      url,
-      {
-        input: [text], // array required by Foundry
-        model: AZURE_OPENAI_EMBEDDING_DEPLOYMENT, // "embeddings-deployment"
+  const response = await axios.post(
+    url,
+    {
+      input: [text],
+      model: AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+    },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": AZURE_OPENAI_API_KEY,
       },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": AZURE_OPENAI_API_KEY, // Foundry Key 1
-        },
-        timeout: 30000,
-      }
-    );
+      timeout: 30000,
+    }
+  );
 
-    return response.data.data[0].embedding;
-  } catch (err) {
-    console.error("Embedding API error:", err.response?.data || err.message);
-    throw err;
-  }
+  return response.data.data[0].embedding;
 }
 
-// --------- Main Ingestion (Multi-file) ----------
+// ------------------ Ingestion ------------------
 async function ingest() {
   try {
     const dataDir = path.join(__dirname, "data");
-    const files = fs.readdirSync(dataDir).filter((f) => f.endsWith(".txt"));
+    const files = fs.readdirSync(dataDir).filter((f) =>
+      /\.(txt|pdf|png|jpg|jpeg)$/i.test(f)
+    );
 
     if (files.length === 0) {
-      console.error("No .txt files found in /data directory.");
+      console.warn("No supported files found in /data");
       return;
     }
 
@@ -90,21 +99,37 @@ async function ingest() {
 
     for (const file of files) {
       const filePath = path.join(dataDir, file);
-      const rawText = fs.readFileSync(filePath, "utf8");
+      let rawText = "";
 
-      if (!rawText || !rawText.trim()) {
-        console.error(`Skipping empty file: ${file}`);
-        continue;
+      // ---- TXT ----
+      if (file.endsWith(".txt")) {
+        rawText = fs.readFileSync(filePath, "utf8");
       }
 
-      const chunks = chunkText(rawText, 800);
-      console.log(`File "${file}" -> ${chunks.length} chunks`);
+      // ---- OCR path ----
+      if (needsOCR(rawText, file)) {
+        console.log(`OCR triggered for file: ${file}`);
+        try {
+          rawText = await extractTextWithOCR(filePath);
+          if (!rawText || rawText.trim().length < 50) {
+            console.warn(`OCR output too small for ${file}, skipping`);
+            continue;
+          }
+        } catch (err) {
+          console.error(`OCR failed for ${file}:`, err.message);
+          continue;
+        }
+      }
+
+      if (!rawText.trim()) continue;
+
+      const chunks = chunkText(rawText);
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i].trim();
         if (!chunk) continue;
 
-        console.log(`Embedding ${file} (chunk ${i + 1}/${chunks.length})...`);
+        console.log(`Embedding ${file} (chunk ${i + 1}/${chunks.length})`);
         const embedding = await getEmbedding(chunk);
 
         docs.push({
@@ -116,15 +141,19 @@ async function ingest() {
       }
     }
 
-    console.log(`Uploading ${docs.length} documents to Azure AI Search...`);
-    const result = await searchClient.uploadDocuments(docs);
+    if (!docs.length) {
+      console.warn("No documents generated for indexing");
+      return;
+    }
 
-    console.log("Upload result:", result.results);
+    console.log(`Uploading ${docs.length} documents to Azure AI Search...`);
+    await searchClient.uploadDocuments(docs);
+
     console.log("Ingestion complete ✅");
   } catch (err) {
-    console.error("Error in ingestion:", err);
+    console.error("Ingestion error:", err);
   }
 }
 
-// Run
+// ------------------ Run ------------------
 ingest();

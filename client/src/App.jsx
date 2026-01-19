@@ -650,10 +650,10 @@ const doSearch = async () => {
               <section className="panel panel-glass slide-up">
                 <div className="panel-header">
                   <div className="panel-title">Upload knowledge</div>
-                  <span className="chip chip-green">PDF &amp; TXT</span>
+                  <span className="chip chip-green">PDF &amp; TXT&amp; Images</span>
                 </div>
                 <p className="panel-subtitle">
-                  Upload PDF or text files. The server will extract text,
+                  Upload PDF, text files or Images. The server will extract text,
                   embed it with Azure OpenAI, and push vectors into Azure AI
                   Search so they become part of your knowledge base.
                 </p>
@@ -666,13 +666,13 @@ const doSearch = async () => {
                         Drag &amp; drop files here, or click to browse
                       </div>
                       <div className="upload-subtitle">
-                        Supported: .pdf, .txt · Up to 10 MB per file
+                        Supported: .pdf, .txt, .png, .jpeg, .jpg · Up to 10 MB per file
                       </div>
                     </div>
                     <input
                       type="file"
                       multiple
-                      accept=".pdf,.txt"
+                      accept=".pdf,.txt,.png,.jpg,.jpeg"
                       onChange={handleFileChange}
                       style={{ display: "none" }}
                     />

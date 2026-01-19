@@ -1,5 +1,6 @@
 // server.js
 // Serve React build - after azure
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -8,8 +9,8 @@ const __dirname = path.dirname(__filename);
 //const pdfParse = require("pdf-parse/lib/pdf-parse");
 // ✅ NEW (bypasses test harness)
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
-
-
+import { extractTextWithOCR } from "./services/ocrServices.js";
+//import dotenv from "dotenv";
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
@@ -28,7 +29,7 @@ import {
   SearchClient,
   AzureKeyCredential,
 }  from "@azure/search-documents";
-dotenv.config();
+
 const {
   AZURE_OPENAI_ENDPOINT,
   AZURE_OPENAI_API_KEY,
@@ -60,6 +61,11 @@ const metrics = {
   lastSearchAt: null,
   lastRagAt: null,
   errorCount: 0,
+
+    // OCR
+  ocrDocuments: 0,
+  ocrPages: 0,
+  ocrErrors: 0,
 };
 
 const adminSettings = {
@@ -371,64 +377,92 @@ app.post("/upload-knowledge", upload.array("files", 10), async (req, res) => {
     const results = [];
 
     for (const file of req.files) {
-      const ext = (path.extname(file.originalname) || "").toLowerCase();
-      let text = "";
+  const ext = (path.extname(file.originalname) || "").toLowerCase();
+  let text = "";
 
-      if (ext === ".txt") {
-        text = file.buffer.toString("utf8");
-      } else if (ext === ".pdf") {
-        try {
-          const data = await pdfParse(file.buffer);
-          text = data.text || "";
-        } catch (pdfErr) {
-          console.error("PDF parse failed:", pdfErr);
-          results.push({
-            file: file.originalname,
-            status: "failed",
-            reason: "PDF parsing error",
-          });
-          continue;
-        }
-      } else {
-        results.push({
-          file: file.originalname,
-          status: "skipped",
-          reason: "Unsupported extension",
-        });
-        continue;
+  // ---------- TXT ----------
+  if (ext === ".txt") {
+    text = file.buffer.toString("utf8");
+  }
+
+  // ---------- PDF ----------
+  else if (ext === ".pdf") {
+    try {
+      const data = await pdfParse(file.buffer);
+      text = (data.text || "").trim();
+
+      // 👉 OCR fallback for scanned PDFs
+      if (!text || text.length < 50) {
+        console.log(`OCR fallback triggered for PDF: ${file.originalname}`);
+        text = await extractTextWithOCR(file.buffer);
       }
-
-      const trimmed = text.trim();
-      if (!trimmed) {
-        results.push({
-          file: file.originalname,
-          status: "skipped",
-          reason: "Empty or unreadable content",
-        });
-        continue;
-      }
-
-      const limited = trimmed.slice(0, 8000);
-
-      const baseName = path.basename(file.originalname, ext);
-      const safeBase = baseName.replace(/[^A-Za-z0-9_\-=]/g, "-");
-      const id = `${Date.now()}-${safeBase}`;
-
-      await indexDocument({
-        id,
-        content: limited,
-        source: file.originalname,
-      });
-
-      metrics.totalDocumentsIndexed += 1;
-      metrics.totalUploads += 1;
-
+    } catch (pdfErr) {
+      console.error("PDF parse failed:", pdfErr);
       results.push({
         file: file.originalname,
-        status: "ingested",
+        status: "failed",
+        reason: "PDF parsing / OCR error",
       });
+      continue;
     }
+  }
 
+  // ---------- IMAGES (OCR ONLY) ----------
+  else if (ext === ".png" || ext === ".jpg" || ext === ".jpeg") {
+    try {
+      console.log(`OCR triggered for image: ${file.originalname}`);
+      text = await extractTextWithOCR(file.buffer);
+    } catch (ocrErr) {
+      console.error("Image OCR failed:", ocrErr);
+      results.push({
+        file: file.originalname,
+        status: "failed",
+        reason: "Image OCR error",
+      });
+      continue;
+    }
+  }
+
+  // ---------- UNSUPPORTED ----------
+  else {
+    results.push({
+      file: file.originalname,
+      status: "skipped",
+      reason: "Unsupported extension",
+    });
+    continue;
+  }
+
+  const trimmed = (text || "").trim();
+  if (!trimmed) {
+    results.push({
+      file: file.originalname,
+      status: "skipped",
+      reason: "Empty or unreadable content",
+    });
+    continue;
+  }
+
+  const limited = trimmed.slice(0, 8000);
+
+  const baseName = path.basename(file.originalname, ext);
+  const safeBase = baseName.replace(/[^A-Za-z0-9_\-=]/g, "-");
+  const id = `${Date.now()}-${safeBase}`;
+
+  await indexDocument({
+    id,
+    content: limited,
+    source: file.originalname,
+  });
+
+  metrics.totalDocumentsIndexed += 1;
+  metrics.totalUploads += 1;
+
+  results.push({
+    file: file.originalname,
+    status: "ingested",
+  });
+}
     return res.json({ success: true, results });
   } catch (err) {
     console.error("Error in /upload-knowledge:", err);
@@ -438,11 +472,7 @@ app.post("/upload-knowledge", upload.array("files", 10), async (req, res) => {
     });
   }
 });
-
-
-
-
-
+// -------------------- Health check --------------------
 app.get("/health", (req, res) => {
   res.send("Vector search + RAG API is running ✅");
 });
