@@ -5,7 +5,6 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Serve React build - after azure
-
 //const pdfParse = require("pdf-parse/lib/pdf-parse");
 // ✅ NEW (bypasses test harness)
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
@@ -46,6 +45,8 @@ const {
   FOUNDY_CHAT_KEY,
 } = process.env;
 
+// Minimum Relevance Score for search results
+//const MIN_RELEVANCE_SCORE = 0.1;
 // -------------------- Express app & static React --------------------
 const app = express();
 app.use(bodyParser.json());
@@ -166,7 +167,8 @@ app.post("/search", async (req, res) => {
     if (!query || typeof query !== "string") {
       return res.status(400).json({ error: "Body must contain 'query' string" });
     }
-// ---- apply admin settings for TopK ----
+
+    // ---- apply admin settings for TopK ----
     const numericTopK = Number(topK);
     const effectiveTopK =
       Number.isFinite(numericTopK) && numericTopK > 0
@@ -176,22 +178,55 @@ app.post("/search", async (req, res) => {
     // ---- metrics: count search request ----
     metrics.totalSearchRequests += 1;
     metrics.lastSearchAt = new Date().toISOString();
-    const hits = await searchSimilarDocs(query, topK);
 
+    // ---- run vector search ----
+    const hits = await searchSimilarDocs(query, effectiveTopK);
+
+    // ---- Intelligent "No Results" Handling ----
+    const MIN_RELEVANCE_SCORE = 0.58;
+
+    const strongHits = hits.filter(
+      (h) => typeof h.score === "number" && h.score >= MIN_RELEVANCE_SCORE
+    );
+
+    if (strongHits.length === 0) {
+      // ---- metrics: no-result tracking ----
+      metrics.noResultSearchCount =
+        (metrics.noResultSearchCount || 0) + 1;
+
+      return res.json({
+        query,
+        count: 0,
+        results: [],
+        noResults: true,
+        message:
+          "No sufficiently relevant documents were found for your query.",
+        suggestions: [
+          "Try rephrasing your question",
+          "Use broader or simpler keywords",
+          "Upload documents related to this topic",
+        ],
+      });
+    }
+
+    // ---- normal successful response ----
     return res.json({
       query,
-      count: hits.length,
-      results: hits,
+      count: strongHits.length,
+      results: strongHits,
     });
   } catch (err) {
     console.error("Error in /search:", err.response?.data || err.message || err);
-      metrics.errorCount += 1; // <-- metrics for errors
+
+    metrics.errorCount += 1; // <-- metrics for errors
+
     return res.status(500).json({
       error: "Internal server error",
       details: err.response?.data || err.message || "Unknown",
     });
   }
 });
+
 
 // -------------------- Health check --------------------
 
@@ -265,7 +300,7 @@ app.get("/test-chat", async (req, res) => {
 // -------------------- /rag-chat – full RAG answer + citations + metadata --------------------
 app.post("/rag-chat", async (req, res) => {
   try {
-    const { query, topK} = req.body;
+    const { query, topK } = req.body;
 
     if (!query || typeof query !== "string") {
       return res.status(400).json({ error: "Body must contain 'query' string" });
@@ -278,30 +313,55 @@ app.post("/rag-chat", async (req, res) => {
           "Missing FOUNDY_CHAT_ENDPOINT, FOUNDY_CHAT_MODEL, or FOUNDY_CHAT_KEY in environment.",
       });
     }
+
+    // ---- apply admin TopK limits ----
+    const numericTopK = Number(topK);
     const effectiveTopK =
-      typeof topK === "number" && !isNaN(topK)
-        ? Math.min(topK, adminSettings.maxTopK)
+      Number.isFinite(numericTopK) && numericTopK > 0
+        ? Math.min(numericTopK, adminSettings.maxTopK)
         : adminSettings.defaultTopK;
 
+    // ---- metrics ----
     metrics.totalRagRequests += 1;
     metrics.lastRagAt = new Date().toISOString();
-    const hits = await searchSimilarDocs(query, topK);
 
-    if (!hits || hits.length === 0) {
+    // ---- retrieve documents ----
+    const hits = await searchSimilarDocs(query, effectiveTopK);
+
+    // ---- Phase 1.4: Intelligent No-Result Handling ----
+    const MIN_RELEVANCE_SCORE = 0.57;
+
+    const strongHits = (hits || []).filter(
+      (h) => typeof h.score === "number" && h.score >= MIN_RELEVANCE_SCORE
+    );
+
+    if (strongHits.length === 0) {
+      metrics.noResultRagCount =
+        (metrics.noResultRagCount || 0) + 1;
+
       return res.json({
         query,
-        answer:
-          "I could not find any relevant information in the indexed documents for this question.",
+        answer: null,
+        noResults: true,
+        message:
+          "I couldn’t find enough relevant information in the indexed documents to answer this question.",
+        suggestions: [
+          "Try rephrasing the question",
+          "Ask a broader or more general question",
+          "Upload documents related to this topic",
+        ],
         documents: [],
       });
     }
 
-    const contextBlocks = hits.map(
+    // ---- build context from strong hits only ----
+    const contextBlocks = strongHits.map(
       (h, index) =>
         `[Doc #${index + 1}] Source: ${h.source || "unknown"} | Id: ${
           h.id
         } | Score: ${h.score}\n${h.content}`
     );
+
     const contextText = contextBlocks.join("\n\n");
 
     const messages = [
@@ -352,7 +412,8 @@ ${query}
     return res.json({
       query,
       answer,
-      documents: hits,
+      noResults: false,
+      documents: strongHits,
     });
   } catch (err) {
     console.error(
@@ -360,7 +421,8 @@ ${query}
       err.response?.status,
       err.response?.data || err.message || err
     );
-metrics.errorCount += 1;
+
+    metrics.errorCount += 1;
 
     return res.status(500).json({
       error: "RAG chat failed",
@@ -368,6 +430,7 @@ metrics.errorCount += 1;
     });
   }
 });
+
 app.post("/upload-knowledge", upload.array("files", 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {

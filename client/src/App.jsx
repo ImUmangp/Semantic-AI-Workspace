@@ -215,21 +215,37 @@ const doSearch = async () => {
         body: JSON.stringify({ query: trimmed, topK: k }),
       });
 
-      const data = await res.json();
+     const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Request failed");
-      }
+if (!res.ok) {
+  throw new Error(data.error || "Request failed");
+}
 
-      const found = data.count ?? data.results?.length ?? 0;
-      setResults(data.results || []);
-      setSearchStatus(`Found ${found} result(s).`);
-      setSearchStatusClass("status ok");
+// ---- NEW: intelligent no-results handling ----
+if (data.noResults) {
+  setResults([]);
+  setSearchStatus(data.message || "No relevant documents found.");
+  setSearchStatusClass("status warning");
 
-      showToast(
-        `Vector search complete (${found} result${found === 1 ? "" : "s"}).`,
-        "success"
-      );
+  showToast(
+    "No relevant documents found. Try rephrasing your query.",
+    "warning"
+  );
+
+  return; // ⛔ stop normal success flow
+}
+
+// ---- Normal success path ----
+const found = data.count ?? data.results?.length ?? 0;
+setResults(data.results || []);
+setSearchStatus(`Found ${found} result(s).`);
+setSearchStatusClass("status ok");
+
+showToast(
+  `Vector search complete (${found} result${found === 1 ? "" : "s"}).`,
+  "success"
+);
+
     } catch (err) {
       console.error(err);
       setSearchStatus("Error");
@@ -341,12 +357,22 @@ const doSearch = async () => {
         throw new Error(msg);
       }
 
-      setRagAnswer(data.answer || "No answer generated.");
-      setRagSources(data.documents || []);
-      setRagStatus("Answer ready.");
-      setRagStatusClass("status ok");
+      // ---- Phase 1.4: Intelligent No-Result Handling ----
+if (data.noResults) {
+  setRagAnswer(data.answer);
+  setRagSources([]);
+  setRagStatus("No relevant documents found.");
+  setRagStatusClass("status warning");
 
-      showToast("RAG answer generated successfully.", "success");
+  showToast("No relevant documents found for this question.", "warning");
+} else {
+  setRagAnswer(data.answer || "No answer generated.");
+  setRagSources(data.documents || []);
+  setRagStatus("Answer ready.");
+  setRagStatusClass("status ok");
+
+  showToast("RAG answer generated successfully.", "success");
+}
     } catch (err) {
       console.error(err);
       setRagStatus("Error");
@@ -535,7 +561,7 @@ const doSearch = async () => {
                 <div className="section-title">Vector Search Results</div>
                 <div id="results">
                   {results.length === 0 && searchStatus && (
-                    <p className="status">No results.</p>
+                    <p className={searchStatusClass}>{searchStatus}</p>
                   )}
                   {results.map((r, idx) => (
                     <div key={r.id ?? idx} className="result result-animate">
