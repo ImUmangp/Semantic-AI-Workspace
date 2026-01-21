@@ -709,6 +709,7 @@ if (data.noResults) {
     onKeyDown={handleVectorKeyDown}
   />
 
+
   <button
   type="button"
   className={`mic-btn ${isListening ? "listening" : ""}`}
@@ -741,7 +742,14 @@ if (data.noResults) {
   <line x1="12" y1="19" x2="12" y2="23" />
   <line x1="8" y1="23" x2="16" y2="23" />
 </svg>
-
+{isListening && (
+  <div className="voice-wave">
+    <span />
+    <span />
+    <span />
+    <span />
+  </div>
+)}
   </button>
 </div>
 
@@ -964,6 +972,14 @@ if (data.noResults) {
   <line x1="12" y1="19" x2="12" y2="23" />
   <line x1="8" y1="23" x2="16" y2="23" />
 </svg>
+{isListening && (
+  <div className="voice-wave">
+    <span />
+    <span />
+    <span />
+    <span />
+  </div>
+)}
 
   </button>
 </div>
