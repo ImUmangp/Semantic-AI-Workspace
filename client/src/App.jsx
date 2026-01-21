@@ -4,6 +4,8 @@ import { createPortal } from "react-dom";
 import { PublicClientApplication } from "@azure/msal-browser";
 import { msalConfig, loginRequest } from "./authConfig";
 import { ADMIN_GROUP_ID } from "./authConfig";
+import { useRef } from "react";
+
 // ---- MSAL instance + initializer ---------------------------------
 const msalInstance = new PublicClientApplication(msalConfig);
 let msalReady = false;
@@ -188,6 +190,10 @@ const highlightText = (text, keywords) => {
 
 /* ---------- Main workspace with sidebar + tabs ---------- */
 function VectorRagPage({ activeTab, setActiveTab,isAdmin }) {
+  //Shared Voice State
+  const [isListening, setIsListening] = useState(false);
+const recognitionRef = useRef(null);
+
   // ---------- Vector search state ----------
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(5);
@@ -542,7 +548,49 @@ if (data.noResults) {
         navItemsBase[3],             // settings
       ]
     : navItemsBase;
-  
+  const startVoiceInput = (onResult) => {
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    showToast(
+      "Voice input is not supported in this browser. Use Chrome or Edge.",
+      "warning"
+    );
+    return;
+  }
+
+  if (isListening) return;
+
+  const recognition = new SpeechRecognition();
+  recognitionRef.current = recognition;
+
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    setIsListening(true);
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    onResult(transcript);
+  };
+
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+    showToast("Voice input failed. Please try again.", "error");
+  };
+
+  recognition.onend = () => {
+    setIsListening(false);
+    recognitionRef.current = null;
+  };
+
+  recognition.start();
+};
+
 
   return (
     <div className="app-root">
@@ -589,15 +637,43 @@ if (data.noResults) {
                   the matches &amp; similarity scores.
                 </p>
 
-                <label htmlFor="query">Query</label>
-                <textarea
-                  id="query"
-                  rows={3}
-                  placeholder="Write any keywords here..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={handleVectorKeyDown}
-                />
+               <label htmlFor="query">Query</label>
+
+<div className="input-with-mic">
+  <textarea
+    id="query"
+    rows={3}
+    placeholder="Write any keywords here..."
+    value={query}
+    onChange={(e) => setQuery(e.target.value)}
+    onKeyDown={handleVectorKeyDown}
+  />
+
+  <button
+    type="button"
+    className={`mic-btn ${isListening ? "listening" : ""}`}
+    onClick={() => startVoiceInput((text) => setQuery(text))}
+    title="Speak your query"
+  >
+  <svg
+  width="18"
+  height="18"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  strokeWidth="2"
+  strokeLinecap="round"
+  strokeLinejoin="round"
+>
+  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+  <line x1="12" y1="19" x2="12" y2="23" />
+  <line x1="8" y1="23" x2="16" y2="23" />
+</svg>
+
+  </button>
+</div>
+
 
                 <div className="topk-row">
                   <div style={{ flex: "0 0 auto" }}>
@@ -774,14 +850,42 @@ if (data.noResults) {
                 </p>
 
                 <label htmlFor="ragQuery">Question</label>
-                <textarea
-                  id="ragQuery"
-                  rows={3}
-                  placeholder="Ask anything..."
-                  value={ragQuery}
-                  onChange={(e) => setRagQuery(e.target.value)}
-                  onKeyDown={handleRagKeyDown}
-                />
+
+<div className="input-with-mic">
+  <textarea
+    id="ragQuery"
+    rows={3}
+    placeholder="Ask anything..."
+    value={ragQuery}
+    onChange={(e) => setRagQuery(e.target.value)}
+    onKeyDown={handleRagKeyDown}
+  />
+
+  <button
+    type="button"
+    className={`mic-btn ${isListening ? "listening" : ""}`}
+    onClick={() => startVoiceInput((text) => setRagQuery(text))}
+    title="Speak your question"
+  >
+  <svg
+  width="18"
+  height="18"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  strokeWidth="2"
+  strokeLinecap="round"
+  strokeLinejoin="round"
+>
+  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+  <line x1="12" y1="19" x2="12" y2="23" />
+  <line x1="8" y1="23" x2="16" y2="23" />
+</svg>
+
+  </button>
+</div>
+
 
                 <div className="btn-row">
                   <button

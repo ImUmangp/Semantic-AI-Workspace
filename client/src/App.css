@@ -401,7 +401,7 @@ body,
 }
 
 /* Form controls */
-
+/*input with mic*/
 label {
   display: block;
   font-size: 0.85rem;
@@ -431,6 +431,39 @@ textarea:focus,
 input:focus {
   border-color: #38bdf8;
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5);
+}
+.input-with-mic {
+  position: relative;
+}
+
+.input-with-mic textarea {
+  padding-right: 42px;
+}
+
+.mic-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 37px;
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #94a3b8;
+}
+
+.mic-btn:hover {
+  color: #38bdf8;
+}
+
+.mic-btn.listening {
+  color: #ef4444;
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
 }
 
 .topk-row {
