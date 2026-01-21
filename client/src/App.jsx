@@ -193,6 +193,7 @@ function VectorRagPage({ activeTab, setActiveTab,isAdmin }) {
   //Shared Voice State
   const [isListening, setIsListening] = useState(false);
 const recognitionRef = useRef(null);
+const [autoSubmitVoice, setAutoSubmitVoice] = useState(true);
 
   // ---------- Vector search state ----------
   const [query, setQuery] = useState("");
@@ -236,7 +237,7 @@ const [selectedRagSource, setSelectedRagSource] = useState(null);
   const showToast = (message, type = "info") => {
     setToast({ message, type });
   };
-  const startVoiceInput = (onResult) => {
+const startVoiceInput = (onResult, onFinal) => {
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -257,6 +258,8 @@ const [selectedRagSource, setSelectedRagSource] = useState(null);
   recognition.interimResults = false;
   recognition.continuous = false;
 
+  setIsListening(true);
+
   recognition.onstart = () => {
     setIsListening(true);
   };
@@ -264,6 +267,8 @@ const [selectedRagSource, setSelectedRagSource] = useState(null);
   recognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
     onResult(transcript);
+    // ✅ store final transcript for submit
+  recognition.finalTranscript = transcript;
   };
 
   recognition.onerror = (event) => {
@@ -274,10 +279,16 @@ const [selectedRagSource, setSelectedRagSource] = useState(null);
   recognition.onend = () => {
     setIsListening(false);
     recognitionRef.current = null;
+
+    // ✅ NEW: auto-submit hook
+    if (typeof onFinal === "function") {
+     onFinal(recognition.finalTranscript);
+  }
   };
 
   recognition.start();
 };
+
   // Auto-hide toast
   useEffect(() => {
     if (!toast) return;
@@ -334,8 +345,12 @@ const visibleResults = showAll
   : results.slice(0, Number(topK));
 
   // ---------- Raw vector search (/search) ----------
-const doSearch = async () => {
-    const trimmed = query.trim();
+const doSearch = async (overrideQuery) => {
+  const finalQuery =
+    typeof overrideQuery === "string" ? overrideQuery : query;
+
+  const trimmed = finalQuery.trim();
+
     const k = parseInt(topK, 10) || 5;
 setShowAll(false);
 
@@ -472,8 +487,13 @@ const visibleRagSources = ragShowAllSources
 
 
   // ---------- RAG chat (/rag-chat) ----------
-  const doRagChat = async () => {
-    const effectiveQuery = (ragQuery || query).trim();
+const doRagChat = async (overrideQuery) => {
+  const finalQuery =
+    typeof overrideQuery === "string"
+      ? overrideQuery
+      : ragQuery || query;
+
+  const effectiveQuery = finalQuery.trim();
     const k = parseInt(topK, 10) || 5;
     
     if (!effectiveQuery) {
@@ -690,12 +710,22 @@ if (data.noResults) {
   />
 
   <button
-    type="button"
-    className={`mic-btn ${isListening ? "listening" : ""}`}
-    onClick={() => startVoiceInput((text) => setQuery(text))}
-   title={isListening ? "Listening…" : "Speak your query"}
+  type="button"
+  className={`mic-btn ${isListening ? "listening" : ""}`}
+  onClick={() =>
+    startVoiceInput(
+      (text) => setQuery(text),
+      (finalText) => {
+    if (autoSubmitVoice && finalText) {
+      doSearch(finalText);
+    }
+  }
+    )
+  }
+  title={isListening ? "Listening…" : "Speak your query"}
   disabled={isListening || searchLoading}
-  >
+>
+
   <svg
   width="18"
   height="18"
@@ -902,13 +932,23 @@ if (data.noResults) {
     onKeyDown={handleRagKeyDown}
   />
 
-  <button
-    type="button"
-    className={`mic-btn ${isListening ? "listening" : ""}`}
-    onClick={() => startVoiceInput((text) => setRagQuery(text))}
-   title={isListening ? "Listening…" : "Speak your question"}
-disabled={isListening || ragLoading}
-  >
+ <button
+  type="button"
+  className={`mic-btn ${isListening ? "listening" : ""}`}
+  onClick={() =>
+    startVoiceInput(
+      (text) => setRagQuery(text),
+      (finalText) => {
+    if (autoSubmitVoice && finalText) {
+      doRagChat(finalText);
+    }
+  }
+    )
+  }
+  title={isListening ? "Listening…" : "Speak your question"}
+  disabled={isListening || ragLoading}
+>
+
   <svg
   width="18"
   height="18"
