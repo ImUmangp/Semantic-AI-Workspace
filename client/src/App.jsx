@@ -236,7 +236,48 @@ const [selectedRagSource, setSelectedRagSource] = useState(null);
   const showToast = (message, type = "info") => {
     setToast({ message, type });
   };
+  const startVoiceInput = (onResult) => {
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
+  if (!SpeechRecognition) {
+    showToast(
+      "Voice input is not supported in this browser. Use Chrome or Edge.",
+      "warning"
+    );
+    return;
+  }
+
+  if (isListening) return;
+
+  const recognition = new SpeechRecognition();
+  recognitionRef.current = recognition;
+
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    setIsListening(true);
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    onResult(transcript);
+  };
+
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+    showToast("Voice input failed. Please try again.", "error");
+  };
+
+  recognition.onend = () => {
+    setIsListening(false);
+    recognitionRef.current = null;
+  };
+
+  recognition.start();
+};
   // Auto-hide toast
   useEffect(() => {
     if (!toast) return;
@@ -248,6 +289,46 @@ const [selectedRagSource, setSelectedRagSource] = useState(null);
       loadAdminStats();
     }
   }, [activeTab]);
+  // shortcut for mic cntrl+M
+// shortcut for mic: Ctrl + M
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    if (e.isComposing) return;
+
+  const isShortcut =
+  (e.ctrlKey || e.metaKey) &&
+  e.key.toLowerCase() === "m";
+
+if (!isShortcut) return;
+
+
+    // Prevent browser default
+    e.preventDefault();
+
+    // Don't interrupt active states
+    if (isListening || searchLoading || ragLoading) return;
+
+    // Decide target based on active tab
+   if (activeTab === "vector") {
+      startVoiceInput((text) => setQuery(text));
+    } else if (activeTab === "rag") {
+      startVoiceInput((text) => setRagQuery(text));
+    }
+  };
+
+  document.addEventListener("keydown", handleKeyDown, true);
+
+  // ✅ CLEANUP (very important)
+  return () => {
+    document.removeEventListener("keydown", handleKeyDown, true);
+  };
+}, [
+  activeTab,
+  isListening,
+  searchLoading,
+  ragLoading,
+  startVoiceInput,
+]);
 const visibleResults = showAll
   ? results
   : results.slice(0, Number(topK));
@@ -548,48 +629,7 @@ if (data.noResults) {
         navItemsBase[3],             // settings
       ]
     : navItemsBase;
-  const startVoiceInput = (onResult) => {
-  const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  if (!SpeechRecognition) {
-    showToast(
-      "Voice input is not supported in this browser. Use Chrome or Edge.",
-      "warning"
-    );
-    return;
-  }
-
-  if (isListening) return;
-
-  const recognition = new SpeechRecognition();
-  recognitionRef.current = recognition;
-
-  recognition.lang = "en-US";
-  recognition.interimResults = false;
-  recognition.continuous = false;
-
-  recognition.onstart = () => {
-    setIsListening(true);
-  };
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    onResult(transcript);
-  };
-
-  recognition.onerror = (event) => {
-    console.error("Speech recognition error:", event.error);
-    showToast("Voice input failed. Please try again.", "error");
-  };
-
-  recognition.onend = () => {
-    setIsListening(false);
-    recognitionRef.current = null;
-  };
-
-  recognition.start();
-};
 
 
   return (
@@ -653,7 +693,8 @@ if (data.noResults) {
     type="button"
     className={`mic-btn ${isListening ? "listening" : ""}`}
     onClick={() => startVoiceInput((text) => setQuery(text))}
-    title="Speak your query"
+   title={isListening ? "Listening…" : "Speak your query"}
+  disabled={isListening || searchLoading}
   >
   <svg
   width="18"
@@ -865,7 +906,8 @@ if (data.noResults) {
     type="button"
     className={`mic-btn ${isListening ? "listening" : ""}`}
     onClick={() => startVoiceInput((text) => setRagQuery(text))}
-    title="Speak your question"
+   title={isListening ? "Listening…" : "Speak your question"}
+disabled={isListening || ragLoading}
   >
   <svg
   width="18"
