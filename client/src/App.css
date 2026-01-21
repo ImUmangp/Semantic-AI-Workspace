@@ -954,6 +954,17 @@ button:disabled {
 .workspace-main {
   flex: 1;
 }
+.answer-text {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.results-info {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
 /* ---------- Upload knowledge styles ---------- */
 
 .upload-box {

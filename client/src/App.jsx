@@ -46,11 +46,11 @@ function TopBar({ account, onLogout, onOpenSettings, isAdmin }) {
         <div className="topbar-logo-dot" />
         <div>
           <div className="topbar-title">
-            AI Document Workspace
+            Local notebook
             {isAdmin && <span className="topbar-admin-chip">Admin</span>}
           </div>
           <div className="topbar-subtitle">
-            Azure OpenAI · Azure AI Search
+            ask your documents · get AI answers
           </div>
         </div>
       </div>
@@ -160,7 +160,9 @@ const [selectedResult, setSelectedResult] = useState(null);
   const [ragStatus, setRagStatus] = useState("");
   const [ragStatusClass, setRagStatusClass] = useState("status");
   const [ragLoading, setRagLoading] = useState(false);
-
+  const [ragShowFullAnswer, setRagShowFullAnswer] = useState(false);
+const [ragShowAllSources, setRagShowAllSources] = useState(false);
+const [selectedRagSource, setSelectedRagSource] = useState(null);
     // ---------- Upload knowledge state ----------
   const [uploadFiles, setUploadFiles] = useState([]);
   const [uploadStatus, setUploadStatus] = useState("");
@@ -329,14 +331,21 @@ showToast(
       [field]: !prev[field],
     }));
   };
+// ---------- RAG sources visibility ----------
+    const RAG_INITIAL_VISIBLE = 1;
+  // ---------- RAG sources visibility ----------
+const visibleRagSources = ragShowAllSources
+  ? ragSources
+  : ragSources.slice(0, RAG_INITIAL_VISIBLE);
+
 
   // ---------- RAG chat (/rag-chat) ----------
   const doRagChat = async () => {
     const effectiveQuery = (ragQuery || query).trim();
     const k = parseInt(topK, 10) || 5;
-
+    
     if (!effectiveQuery) {
-      showToast("Please enter a question for RAG chat.", "warning");
+      showToast("Please enter a question to chat.", "warning");
       return;
     }
 
@@ -345,6 +354,9 @@ showToast(
     setRagStatusClass("status");
     setRagAnswer("");
     setRagSources([]);
+    setRagShowFullAnswer(false);
+setRagShowAllSources(false);
+setSelectedRagSource(null);
 
     try {
       const res = await fetch("/rag-chat", {
@@ -373,7 +385,13 @@ showToast(
 
       // ---- Phase 1.4: Intelligent No-Result Handling ----
 if (data.noResults) {
-  setRagAnswer(data.answer);
+  const fallbackAnswer =
+    data.message ||
+    "I don’t have enough information in the indexed documents to answer this question. " +
+    "Please try rephrasing your question or upload relevant documents.";
+ 
+  setRagAnswer(fallbackAnswer);
+//  setRagAnswer(data.answer);
   setRagSources([]);
   setRagStatus("No relevant documents found.");
   setRagStatusClass("status warning");
@@ -385,7 +403,7 @@ if (data.noResults) {
   setRagStatus("Answer ready.");
   setRagStatusClass("status ok");
 
-  showToast("RAG answer generated successfully.", "success");
+  showToast("Answer generated successfully.", "success");
 }
     } catch (err) {
       console.error(err);
@@ -464,8 +482,8 @@ if (data.noResults) {
 
   // ---------- Sidebar navigation ----------
  const navItemsBase = [
-    { id: "vector", label: "Vector Search", icon: "🔍" },
-    { id: "rag", label: "RAG Chat", icon: "🤖" },
+    { id: "vector", label: "Search", icon: "🔍" },
+    { id: "rag", label: "Chat", icon: "🤖" },
     { id: "upload", label: "Upload knowledge", icon: "📤" },
     { id: "settings", label: "Settings", icon: "⚙️" },
   ];
@@ -479,6 +497,8 @@ if (data.noResults) {
         navItemsBase[3],             // settings
       ]
     : navItemsBase;
+  
+
   return (
     <div className="app-root">
       <div className="neon-orbit neon-orbit-1" />
@@ -489,9 +509,9 @@ if (data.noResults) {
         <div className="workspace">
           <aside className="sidebar">
             <div className="sidebar-header">
-              <div className="sidebar-title">Workspace</div>
+              <div className="sidebar-title">Workbook</div>
               <div className="sidebar-subtitle">
-                Vector DB · RAG · Settings
+                Search · Chat · Note
               </div>
             </div>
             <nav className="sidebar-nav">
@@ -516,19 +536,19 @@ if (data.noResults) {
             {activeTab === "vector" && (
               <section className="panel panel-glass slide-up">
                 <div className="panel-header">
-                  <div className="panel-title">Vector Search</div>
+                  <div className="panel-title">Search</div>
                   <span className="chip">Raw results</span>
                 </div>
                 <p className="panel-subtitle">
-                  Run pure vector search on your indexed documents and inspect
-                  the raw matches &amp; similarity scores.
+                  Run pure search on your documents and inspect
+                  the matches &amp; similarity scores.
                 </p>
 
                 <label htmlFor="query">Query</label>
                 <textarea
                   id="query"
                   rows={3}
-                  placeholder="e.g. What does sample1 talk about?"
+                  placeholder="Write any keywords here..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleVectorKeyDown}
@@ -580,7 +600,7 @@ if (data.noResults) {
 )}
                 </div>
 
-                <div className="section-title">Vector Search Results</div>
+                <div className="section-title">Search Results</div>
                 <div id="results">
          {results.length > 0 && (
   <p className="results-info">
@@ -697,14 +717,14 @@ if (data.noResults) {
             {activeTab === "rag" && (
               <section className="panel panel-glass slide-up">
                 <div className="panel-header">
-                  <div className="panel-title">RAG Chat</div>
+                  <div className="panel-title">ChatBook</div>
                   <span className="chip chip-green">
                     AI answer + citations
                   </span>
                 </div>
                 <p className="panel-subtitle">
                   Ask a question. The assistant retrieves the most relevant
-                  chunks and generates a grounded answer with bullet-style
+                  source and generates a grounded answer with bullet-style
                   citations.
                 </p>
 
@@ -742,46 +762,166 @@ if (data.noResults) {
                   </span>
                 </div>
 
-                <div className="section-title">AI Answer</div>
-                <div id="ragAnswer" className="answer-box glow-border">
-                  {ragAnswer ? (
-                    ragAnswer
-                  ) : (
-                    <span className="answer-placeholder">
-                      Your RAG answer will appear here.
-                    </span>
-                  )}
-                </div>
+             <div className="section-title">AI Answer</div>
+
+<div id="ragAnswer" className="answer-box glow-border">
+  {ragAnswer ? (
+    <>
+      <div className="answer-text">
+        {ragShowFullAnswer
+          ? ragAnswer
+          : getPreviewText(ragAnswer, 600)}
+      </div>
+
+      {ragAnswer.length > 600 && (
+        <button
+          className="btn-link"
+          onClick={() => setRagShowFullAnswer((v) => !v)}
+        >
+          {ragShowFullAnswer ? "View Less" : "View More"}
+        </button>
+      )}
+    </>
+  ) : (
+    <span className="answer-placeholder">
+      Answer will appear here.
+    </span>
+  )}
+</div>
+
 
                 <div className="section-title">
-                  Relevant Sources &amp; Metadata
-                </div>
-                <div id="ragSources">
-                  {ragSources.length === 0 && ragStatus && (
-                    <p className="status">No relevant documents found.</p>
-                  )}
-                  {ragSources.map((doc, i) => {
-                    const safeSource = doc.source || "unknown source";
-                    const score =
-                      typeof doc.score === "number"
-                        ? doc.score.toFixed(4)
-                        : "n/a";
+  Relevant Sources &amp; Metadata
+</div>
 
-                    return (
-                      <div
-                        key={doc.id ?? i}
-                        className="doc-box result-animate"
-                      >
-                        <div className="meta">
-                          <strong>[Doc #{i + 1}] {safeSource}</strong>
-                          <span className="pill">score: {score}</span>
-                        </div>
-                        <div className="meta">Id: {doc.id}</div>
-                        <div className="doc-content">{doc.content}</div>
-                      </div>
-                    );
-                  })}
+<div id="ragSources">
+
+  {/* ✅ Show info line ONLY when total > topK */}
+  {ragShowAllSources && ragSources.length > 1 && (
+  <p className="results-info">
+    Showing all {ragSources.length} sources
+  </p>
+)}
+
+
+  {visibleRagSources.map((doc, i) => {
+    const safeSource = doc.source || "unknown source";
+    const score =
+      typeof doc.score === "number"
+        ? doc.score.toFixed(4)
+        : "n/a";
+
+    return (
+      <div key={doc.id ?? i} className="doc-box result-animate">
+
+        {/* Header */}
+        <div className="meta">
+          <strong>[Doc #{i + 1}] {safeSource}</strong>
+          <span className="pill">score: {score}</span>
+        </div>
+
+        <div className="meta">Id: {doc.id}</div>
+
+        {/* Preview */}
+        <div className="doc-content">
+          {getPreviewText(doc.content,110)}
+        </div>
+
+        {/* Actions */}
+        <div className="result-actions">
+          <button
+            className="btn-link"
+            onClick={() => setSelectedRagSource(doc)}
+          >
+            View More
+          </button>
+
+          {doc.source && (
+            <a
+              href={`/files/${encodeURIComponent(doc.source)}`}
+              className="btn-link"
+              download
+            >
+              ⬇ Download
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  })}
+
+  {/* ✅ View All button ONLY when needed */}
+  {!ragShowAllSources && ragSources.length > 1 && (
+  <button
+    className="btn-secondary"
+    onClick={() => setRagShowAllSources(true)}
+    style={{ marginTop: 8 }}
+  >
+    View All Sources ({ragSources.length})
+  </button>
+)}
+
+</div>
+{selectedRagSource &&
+  createPortal(
+    <div
+      className="modal-overlay"
+      onClick={() => setSelectedRagSource(null)}
+    >
+      <div
+        className="doc-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="doc-modal-header">
+          <div className="doc-header-left">
+            <span className="doc-icon">📄</span>
+            <div>
+              <div className="doc-filename">
+                {selectedRagSource.source || "Document"}
+              </div>
+              {typeof selectedRagSource.score === "number" && (
+                <div className="doc-score">
+                  Relevance score · {selectedRagSource.score.toFixed(4)}
                 </div>
+              )}
+            </div>
+          </div>
+
+          <button
+            className="doc-close"
+            onClick={() => setSelectedRagSource(null)}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="doc-modal-body">
+          <div className="doc-content">
+            {selectedRagSource.content}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="doc-modal-footer">
+          {selectedRagSource.source && (
+            <a
+              href={`/files/${encodeURIComponent(selectedRagSource.source)}`}
+              download
+              className="btn-secondary"
+            >
+              ⬇ Download original document
+            </a>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+
               </section>
             )}
                         {/* Upload knowledge tab */}
@@ -1048,8 +1188,7 @@ if (data.noResults) {
         </div>
 
         <div className="footer">
-          Built for experiments · Vector search &amp; RAG powered by Azure
-          OpenAI.
+          Built for NathCorp · powered by Azure.
         </div>
       </div>
 
