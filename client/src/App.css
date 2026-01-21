@@ -537,6 +537,12 @@ button:disabled {
   position: relative;
   z-index: 1;
 }
+.results-info {
+  font-size: 0.85rem;
+  color: #9aa4b2;
+  margin-bottom: 6px;
+}
+
 
 .result {
   padding: 10px 12px;

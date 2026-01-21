@@ -180,14 +180,20 @@ app.post("/search", async (req, res) => {
     metrics.lastSearchAt = new Date().toISOString();
 
     // ---- run vector search ----
-    const hits = await searchSimilarDocs(query, effectiveTopK);
+    const hits = await searchSimilarDocs(query, adminSettings.maxTopK);
 
     // ---- Intelligent "No Results" Handling ----
-    const MIN_RELEVANCE_SCORE = 0.58;
+   //onst MIN_RELEVANCE_SCORE = 0.58;
+const STRONG_SCORE = 0.58;
+const MIN_SCORE = 0.50;// everything
+   const allHits = hits.filter(
+  (h) => typeof h.score === "number" && h.score >= MIN_SCORE
+);
 
-    const strongHits = hits.filter(
-      (h) => typeof h.score === "number" && h.score >= MIN_RELEVANCE_SCORE
-    );
+const strongHits = allHits.filter(
+  (h) => h.score >= STRONG_SCORE
+);
+
 
     if (strongHits.length === 0) {
       // ---- metrics: no-result tracking ----
@@ -210,11 +216,13 @@ app.post("/search", async (req, res) => {
     }
 
     // ---- normal successful response ----
-    return res.json({
-      query,
-      count: strongHits.length,
-      results: strongHits,
-    });
+   return res.json({
+  query,
+  count: allHits.length,
+  results: allHits,          // ALL results
+  strongCount: strongHits.length,
+});
+
   } catch (err) {
     console.error("Error in /search:", err.response?.data || err.message || err);
 

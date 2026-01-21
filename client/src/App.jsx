@@ -149,6 +149,7 @@ function VectorRagPage({ activeTab, setActiveTab,isAdmin }) {
   const [searchStatus, setSearchStatus] = useState("");
   const [searchStatusClass, setSearchStatusClass] = useState("status");
   const [searchLoading, setSearchLoading] = useState(false);
+const [showAll, setShowAll] = useState(false);
 
   // ---------- RAG chat state ----------
   const [ragQuery, setRagQuery] = useState("");
@@ -192,11 +193,15 @@ function VectorRagPage({ activeTab, setActiveTab,isAdmin }) {
       loadAdminStats();
     }
   }, [activeTab]);
+const visibleResults = showAll
+  ? results
+  : results.slice(0, Number(topK));
 
   // ---------- Raw vector search (/search) ----------
 const doSearch = async () => {
     const trimmed = query.trim();
     const k = parseInt(topK, 10) || 5;
+setShowAll(false);
 
     if (!trimmed) {
       showToast("Please enter a query to search.", "warning");
@@ -556,14 +561,32 @@ if (data.noResults) {
                       </>
                     )}
                   </button>
+     {!showAll && results.length > Number(topK) && (
+  <button
+    onClick={() => setShowAll(true)}
+    className="btn-secondary"
+  >
+    View All ({results.length})
+  </button>
+)}
                 </div>
 
                 <div className="section-title">Vector Search Results</div>
                 <div id="results">
+         {results.length > 0 && (
+  <p className="results-info">
+    {showAll ? (
+      <>Showing all {results.length} of {results.length} results</>
+    ) : (
+      <>Showing top {Math.min(Number(topK), results.length)} of {results.length} results</>
+    )}
+  </p>
+)}
+
                   {results.length === 0 && searchStatus && (
                     <p className={searchStatusClass}>{searchStatus}</p>
                   )}
-                  {results.map((r, idx) => (
+                  {visibleResults.map((r, idx) => (
                     <div key={r.id ?? idx} className="result result-animate">
                       <div className="source">
                         #{idx + 1} • {r.source || "unknown source"}
