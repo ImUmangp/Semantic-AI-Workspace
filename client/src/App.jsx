@@ -40,6 +40,7 @@ function TopBar({ account, onLogout, onOpenSettings, isAdmin }) {
     if (onLogout) onLogout();
   };
 
+
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -107,8 +108,6 @@ function TopBar({ account, onLogout, onOpenSettings, isAdmin }) {
   );
 }
 
-
-
 /* ---------- LOGIN PAGE (unchanged except layout is now fixed) ---------- */
 function LoginPage({ onLogin }) {
   return (
@@ -140,6 +139,52 @@ function LoginPage({ onLogin }) {
     </div>
   );
 }
+const extractHighlightKeywords = (answer) => {
+  if (!answer) return [];
+
+  return Array.from(
+    new Set(
+      answer
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .split(/\s+/)
+        .filter(
+          w =>
+            w.length >= 3 &&
+            ![
+              "which",
+              "where",
+              "there",
+              "these",
+              "those",
+              "using",
+              "follow",
+              "setup",
+              "steps",
+              "their",
+            ].includes(w)
+        )
+    )
+  ).slice(0, 10);
+};
+
+const highlightText = (text, keywords) => {
+  if (!text || !keywords.length) return text;
+
+  let highlighted = text;
+
+  keywords.forEach(word => {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`\\b(${escaped})\\b`, "gi");
+
+    highlighted = highlighted.replace(
+      regex,
+      match => `<mark class="answer-highlight">${match}</mark>`
+    );
+  });
+
+  return highlighted;
+};
 
 /* ---------- Main workspace with sidebar + tabs ---------- */
 function VectorRagPage({ activeTab, setActiveTab,isAdmin }) {
@@ -823,9 +868,16 @@ if (data.noResults) {
         <div className="meta">Id: {doc.id}</div>
 
         {/* Preview */}
-        <div className="doc-content">
-          {getPreviewText(doc.content,110)}
-        </div>
+        <div
+  className="doc-content"
+  dangerouslySetInnerHTML={{
+    __html: highlightText(
+      getPreviewText(doc.content, 280),
+      extractHighlightKeywords(ragAnswer)
+    )
+  }}
+/>
+
 
         {/* Actions */}
         <div className="result-actions">

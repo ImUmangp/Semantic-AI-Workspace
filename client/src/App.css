@@ -964,6 +964,29 @@ button:disabled {
   color: var(--text-muted);
   margin-bottom: 6px;
 }
+.citation-link {
+  background: none;
+  border: none;
+  color: #38bdf8;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 500;
+}
+
+.citation-link:hover {
+  text-decoration: underline;
+}
+
+.answer-highlight {
+  background: rgba(56, 189, 248, 0.25);
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.source-highlight {
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.6);
+  transition: box-shadow 0.3s ease;
+}
 
 /* ---------- Upload knowledge styles ---------- */
 
