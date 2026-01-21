@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
+import { createPortal } from "react-dom";
 import { PublicClientApplication } from "@azure/msal-browser";
 import { msalConfig, loginRequest } from "./authConfig";
 import { ADMIN_GROUP_ID } from "./authConfig";
@@ -150,6 +151,7 @@ function VectorRagPage({ activeTab, setActiveTab,isAdmin }) {
   const [searchStatusClass, setSearchStatusClass] = useState("status");
   const [searchLoading, setSearchLoading] = useState(false);
 const [showAll, setShowAll] = useState(false);
+const [selectedResult, setSelectedResult] = useState(null);
 
   // ---------- RAG chat state ----------
   const [ragQuery, setRagQuery] = useState("");
@@ -261,6 +263,13 @@ showToast(
       setSearchLoading(false);
     }
   };
+  const getPreviewText = (text, maxLength = 100) => {
+  if (!text) return "";
+  return text.length > maxLength
+    ? text.slice(0, maxLength) + "..."
+    : text;
+};
+
   const loadAdminStats = async () => {
     try {
       setAdminLoading(true);
@@ -591,7 +600,29 @@ if (data.noResults) {
                       <div className="source">
                         #{idx + 1} • {r.source || "unknown source"}
                       </div>
-                      <div style={{ marginTop: 4 }}>{r.content}</div>
+                     <div style={{ marginTop: 4 }}>
+  {getPreviewText(r.content)}
+</div>
+
+<div className="result-actions">
+  <button
+    className="btn-link"
+    onClick={() => setSelectedResult(r)}
+  >
+    View More
+  </button>
+
+  {r.source && (
+    <a
+      href={`/files/${encodeURIComponent(r.source)}`}
+      className="btn-link"
+      download
+    >
+      ⬇ Download
+    </a>
+  )}
+</div>
+
                       {typeof r.score === "number" && (
                         <div className="score">
                           score: {r.score.toFixed(4)}
@@ -600,6 +631,65 @@ if (data.noResults) {
                     </div>
                   ))}
                 </div>
+{selectedResult &&
+  createPortal(
+    <div className="modal-overlay" onClick={() => setSelectedResult(null)}>
+      <div
+        className="doc-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div className="doc-modal-header">
+          <div className="doc-header-left">
+            <span className="doc-icon">📄</span>
+            <div>
+              <div className="doc-filename">
+                {selectedResult.source}
+              </div>
+              {typeof selectedResult.score === "number" && (
+                <div className="doc-score">
+                  Relevance score · {selectedResult.score.toFixed(4)}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button
+            className="doc-close"
+            onClick={() => setSelectedResult(null)}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="doc-modal-body">
+          <div className="doc-content">
+            {selectedResult.content}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="doc-modal-footer">
+          {selectedResult.source && (
+            <a
+              href={`/files/${encodeURIComponent(selectedResult.source)}`}
+              download
+              className="btn-secondary"
+            >
+              ⬇ Download original document
+            </a>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )}
+
+
+
               </section>
             )}
 
