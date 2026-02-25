@@ -1067,14 +1067,14 @@ if (data.noResults) {
           <span className="pill">score: {score}</span>
         </div>
 
-        <div className="meta">Id: {doc.id}</div>
+       {/* <div className="meta">Id: {doc.id}</div>*/}
 
         {/* Preview */}
         <div
   className="doc-content"
   dangerouslySetInnerHTML={{
     __html: highlightText(
-      getPreviewText(doc.content, 280),
+      getPreviewText(doc.content, 100),
       extractHighlightKeywords(ragAnswer)
     )
   }}
